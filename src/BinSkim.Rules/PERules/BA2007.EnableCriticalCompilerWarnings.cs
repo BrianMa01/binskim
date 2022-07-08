@@ -51,11 +51,16 @@ namespace Microsoft.CodeAnalysis.IL.Rules
         {
             return new List<IOption>
             {
+                ExcludedLibraries,
                 RequiredCompilerWarnings,
             }.ToImmutableArray();
         }
 
         private const string AnalyzerName = RuleIds.EnableCriticalCompilerWarnings + "." + nameof(EnableCriticalCompilerWarnings);
+
+        public static PerLanguageOption<StringToVersionMap> ExcludedLibraries { get; } =
+            new PerLanguageOption<StringToVersionMap>(
+                AnalyzerName, nameof(ExcludedLibraries), defaultValue: () => BuildExcludedLibraries());
 
         /// <summary>
         /// Enable namespace import optimization.
@@ -121,6 +126,19 @@ namespace Microsoft.CodeAnalysis.IL.Rules
                 {
                     // uninteresting...
                     continue;
+                }
+
+                // See if the library is in our skip list
+	            StringToVersionMap allowedLibraries = context.Policy.GetProperty(ExcludedLibraries);
+	            if (!string.IsNullOrEmpty(om.Lib))
+                {
+                    string libFileName = string.Concat(System.IO.Path.GetFileName(om.Lib), ",", omDetails.Language.ToString()).ToLowerInvariant();
+
+                    if (allowedLibraries.TryGetValue(libFileName, out Version minAllowedVersion) &&
+                        omDetails.CompilerBackEndVersion >= minAllowedVersion)
+                    {
+                        continue;
+                    }
                 }
 
                 int warningLevel = omDetails.WarningLevel;
@@ -280,6 +298,16 @@ namespace Microsoft.CodeAnalysis.IL.Rules
                 4995,
                 4996
             };
+            return result;
+        }
+
+        private static StringToVersionMap BuildExcludedLibraries()
+        {
+            var result = new StringToVersionMap();
+
+            // Example entries
+            // result["libeay32.lib,unknown"] = new Version("0.0.0.0");
+
             return result;
         }
     }
